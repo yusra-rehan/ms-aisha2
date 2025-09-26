@@ -11,7 +11,6 @@ from docx import Document as DocxDocument
 
 # Show title and description.
 st.title("📄 MS AISHA (AI - Aritifically Intelligent Student Helping Assitant)")
-st.image("https://chatgpt.com/s/m_68d5ebab3de08191b6a5a51661650a03", width=200)
 st.write(
     "Please start by uploading your homework and any reference materials you have. Then, ask a question about your homework. "
     "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
