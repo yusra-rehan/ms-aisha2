@@ -7,5 +7,7 @@ faiss-cpu
 python-dotenv
 pypdf
 streamlit-chat
+
 tiktoken
+python-docx
 
