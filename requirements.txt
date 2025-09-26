@@ -1,2 +1,11 @@
 streamlit
 openai
+langchain
+chromadb    
+langchain-community
+faiss-cpu
+python-dotenv
+pypdf
+streamlit-chat
+tiktoken
+
