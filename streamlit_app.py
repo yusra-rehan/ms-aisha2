@@ -18,52 +18,47 @@ except Exception:
     PyPDF2 = None
 
 
-st.set_page_config(page_title="MS AISHA — AI Student Helper (RAG)", page_icon="📄", layout="centered")
+
+
+st.set_page_config(page_title="MS AISHA — AI Student Helper", page_icon="📄", layout="centered")
 
 st.title("📄 MS AISHA (Artificially Intelligent Student Helping Assistant)")
-# Show title and description with wider styling
-st.markdown(
-    """
-    <div style='text-align: center; width: 100%;'>
-        <h1 style='font-size: 3em; margin-bottom: 0.2em;'>📄 Ms AISHA</h1>
-        <h2 style='font-size: 2em; font-weight: 400; margin-top: 0;'>Artificially Intelligent Student Helping Assistant</h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 st.write(
-    "Please start by uploading your homework and any reference materials you have. Then, ask a question about your homework. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
+    "Upload your homework and any reference materials, then ask a question. "
+    "Add your OpenAI API key in the sidebar (or via `st.secrets['OPENAI_API_KEY']`). "
+    "The tutor gives hints and guiding questions — **never direct answers**."
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
+# --- API key (no hard-coding) ---
+with st.sidebar:
+    st.header("🔐 API")
+  #  api_key = st.secrets.get("OPENAI_API_KEY", "")
+    api_key = st.secrets["openai_api_key"] if "openai_api_key" in st.secrets else st.text_input("Enter your OpenAI API key:", type="password")
 
-openai_api_key = st.secrets["openai_api_key"] if "openai_api_key" in st.secrets else st.text_input("Enter your OpenAI API key:", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+    st.caption("Tip: put `OPENAI_API_KEY = \"...\"` in `.streamlit/secrets.toml` for convenience.")
+    st.divider()
+    st.write("Made for middle-school learners. Upload files and interact step-by-step.")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+if not api_key:
+    st.info("Add your OpenAI API key in the sidebar to continue.", icon="🗝️")
+    st.stop()
 
-    # Let the user upload a file via `st.file_uploader`.
+client = OpenAI(api_key=api_key)
 
-    st.header("Step 1: Upload Homework and Study Material")
-    uploaded_homework = st.file_uploader(
-        "Upload your homework (required)", type=("txt", "md", "pdf", "docx"), key="homework"
-    )
-    uploaded_study = st.file_uploader(
-        "Upload your study/reference material (optional)", type=("txt", "md", "pdf", "docx"), key="study"
-    )
+# --- File uploaders ---
+st.header("Step 1: Upload Homework and Study Material")
+uploaded_homework = st.file_uploader("Upload your homework (required)", type=("txt", "md", "pdf", "docx"), key="homework")
+uploaded_study = st.file_uploader("Upload your study/reference material (optional)", type=("txt", "md", "pdf", "docx"), key="study")
 
 def read_any(file):
     if file is None:
         return ""
     name = (getattr(file, "name", "") or "").lower()
     mime = (getattr(file, "type", "") or "").lower()
-    ext = name.split(".")[-1] if "." in name else ""
+
+    ext = ""
+    if "." in name:
+        ext = name.split(".")[-1]
 
     def as_text(b):
         try:
@@ -88,94 +83,140 @@ def read_any(file):
         pages = []
         for i in range(len(reader.pages)):
             try:
-                txt = reader.pages[i].extract_text() or ""
-                pages.append(f"[p.{i+1}] {txt}")
+                pages.append(reader.pages[i].extract_text() or "")
             except Exception:
-                pages.append(f"[p.{i+1}]")
+                pages.append("")
         return "\n\n".join(pages)
 
     # Plain text / md fallback
     return as_text(file.read())
 
+homework_text = read_any(uploaded_homework) if uploaded_homework else ""
+study_text = read_any(uploaded_study) if uploaded_study else ""
+
 if uploaded_homework:
-    homework_text = read_any(uploaded_homework) if uploaded_homework else ""
-    study_text = ""
-    if uploaded_study:
-        study_text = read_any(uploaded_study) if uploaded_study else ""
+    st.header("Step 2: Let’s Work on Your Homework!")
+    st.write(
+        "The tutor will give **hints**, ask **guiding questions**, and check your understanding. "
+        "When you’re ready, submit your own answer to get feedback."
+    )
 
-    st.header("Step 2: Let's Work on Your Homework!")
-    st.write("This AI tutor will help you solve your homework by giving hints and teaching you concepts. It will not give you the direct answer, but will guide you until you understand. When you're ready, submit your answer for feedback!")
-
-    if 'tutor_history' not in st.session_state:
-        st.session_state.tutor_history = []
-    if 'student_history' not in st.session_state:
-        st.session_state.student_history = []
-    if 'awaiting_answer' not in st.session_state:
+    # --- Session state ---
+    if "awaiting_answer" not in st.session_state:
         st.session_state.awaiting_answer = False
-    if 'last_hint' not in st.session_state:
-        st.session_state.last_hint = ""
+    if "history" not in st.session_state:
+        st.session_state.history = []  # [(role, content), ...]
 
-    # Step 2a: Tutor gives a hint or asks a guiding question
-    if not st.session_state.awaiting_answer:
-        prompt = f"You are a friendly, encouraging middle school tutor. Your job is to help the student solve their homework by giving hints, asking guiding questions, and teaching concepts. Never give the direct answer. Use the following study material as reference if available. After each hint, ask the student to try the next step or explain their thinking. If the student seems stuck, break the problem down further.\n\nHomework:\n{homework_text}\n\nStudy Material:\n{study_text}\n\nStart by giving a hint or asking a question to help the student begin."
-        messages = [
-            {"role": "system", "content": "You are a middle school tutor. Never give direct answers. Only give hints, explanations, and ask questions to help the student learn. Always check if the student understands before moving on."},
-            {"role": "user", "content": prompt}
-        ]
-        stream = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            stream=True,
+    SYSTEM_INSTRUCTIONS = (
+        "You are a warm, encouraging middle-school tutor.\n"
+        "Rules:\n"
+        "1) Never give the direct answer.\n"
+        "2) Use hints, guiding questions, and short explanations.\n"
+        "3) Break problems into steps; check understanding before moving on.\n"
+        "4) Encourage the student to show their thinking.\n"
+        "5) If the student is correct, praise them and ask for the next step.\n"
+        "6) If they are done, invite them to paste final answers for review.\n"
+    )
+
+    # --- Start turn: tutor gives a first hint ---
+    if not st.session_state.awaiting_answer and homework_text.strip():
+        prompt = (
+            "Start by giving a helpful hint or a question to get the student going. "
+            "Use the study material only if relevant.\n\n"
+            f"Homework:\n{homework_text}\n\n"
+            f"Study Material:\n{study_text}\n"
         )
-        st.session_state.last_hint = ""
-        for chunk in stream:
-            st.session_state.last_hint += chunk.choices[0].delta.content or ""
-        st.markdown(st.session_state.last_hint)
-        st.session_state.awaiting_answer = True
-        st.session_state.tutor_history.append(st.session_state.last_hint)
+        st.subheader("Tutor")
+        placeholder = st.empty()
+        streamed = ""
 
-    # Step 2b: Student responds
-    if st.session_state.awaiting_answer:
-        student_input = st.text_area("Your turn! Type your answer, thought process, or next step:", key="student_input")
-        if st.button("Submit Answer/Step"):
-            st.session_state.student_history.append(student_input)
-            # Tutor evaluates student's response and gives next hint or feedback
-            tutor_followup = f"The student responded: {student_input}\n\nHomework: {homework_text}\n\nStudy Material: {study_text}\n\nAs a tutor, do NOT give the answer. Instead, evaluate if the student is on the right track, give feedback, and provide the next hint or question. If the student is correct, encourage them and ask for the next step. If they are done, ask them to submit their final answers for review. If they are stuck, break it down further."
-            messages = [
-                {"role": "system", "content": "You are a middle school tutor. Never give direct answers. Only give hints, explanations, and ask questions to help the student learn. Always check if the student understands before moving on."},
-                {"role": "user", "content": tutor_followup}
-            ]
+        with st.spinner("Thinking..."):
             stream = client.chat.completions.create(
                 model="gpt-4o",
-                messages=messages,
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                    {"role": "user", "content": prompt},
+                ],
                 stream=True,
+                temperature=0.2,
             )
-            tutor_reply = ""
             for chunk in stream:
-                tutor_reply += chunk.choices[0].delta.content or ""
-            st.markdown(tutor_reply)
-            st.session_state.tutor_history.append(tutor_reply)
+                piece = chunk.choices[0].delta.content or ""
+                streamed += piece
+                placeholder.markdown(streamed)
+
+        st.session_state.history.append(("assistant", streamed))
+        st.session_state.awaiting_answer = True
+
+    # --- Student input ---
+    if st.session_state.awaiting_answer:
+        st.subheader("Your Turn")
+        student_input = st.text_area("Type your answer, thought process, or next step:")
+        col1, col2 = st.columns(2)
+
+        if col1.button("Submit Answer/Step", type="primary") and student_input.strip():
+            st.session_state.history.append(("user", student_input))
+
+            followup = (
+                f"The student responded:\n{student_input}\n\n"
+                f"Homework:\n{homework_text}\n\n"
+                f"Study Material:\n{study_text}\n\n"
+                "Evaluate if the student is on track. Do NOT give the answer. "
+                "Give feedback and the next hint or question. If correct, encourage and ask for the next step. "
+                "If finished, ask for final answers for review. If stuck, break it down further."
+            )
+
+            st.subheader("Tutor")
+            placeholder = st.empty()
+            streamed = ""
+            with st.spinner("Thinking..."):
+                stream = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                        {"role": "user", "content": followup},
+                    ],
+                    stream=True,
+                    temperature=0.2,
+                )
+                for chunk in stream:
+                    piece = chunk.choices[0].delta.content or ""
+                    streamed += piece
+                    placeholder.markdown(streamed)
+
+            st.session_state.history.append(("assistant", streamed))
             st.session_state.awaiting_answer = True
 
-        st.write("\nWhen you are finished with your homework, paste your final answers below and click 'Submit Final Answers' for review.")
-        final_answers = st.text_area("Paste your final answers here:", key="final_answers")
-        if st.button("Submit Final Answers") and final_answers.strip():
-            # Tutor reviews the final answers
-            review_prompt = f"The student has submitted their final answers: {final_answers}\n\nHomework: {homework_text}\n\nStudy Material: {study_text}\n\nAs a tutor, review the answers. Give feedback, corrections, and encouragement. If the answers are correct, praise the student. If not, give hints for improvement. Do NOT give the direct answer."
-            messages = [
-                {"role": "system", "content": "You are a middle school tutor. Never give direct answers. Only give hints, explanations, and ask questions to help the student learn. Always check if the student understands before moving on."},
-                {"role": "user", "content": review_prompt}
-            ]
-            stream = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                stream=True,
+        st.markdown("---")
+        final_answers = st.text_area("Paste your **final answers** here for review:")
+        if col2.button("Submit Final Answers") and final_answers.strip():
+            review = (
+                f"The student has submitted final answers:\n{final_answers}\n\n"
+                f"Homework:\n{homework_text}\n\n"
+                f"Study Material:\n{study_text}\n\n"
+                "Review the answers. Provide feedback, corrections, and encouragement. "
+                "If correct, praise. If not, give hints for improvement. **Never give the direct answer.**"
             )
-            review_reply = ""
-            for chunk in stream:
-                review_reply += chunk.choices[0].delta.content or ""
-            st.markdown(review_reply)
-            st.session_state.tutor_history.append(review_reply)
-            st.session_state.awaiting_answer = False
-    
 
+            st.subheader("Tutor Review")
+            placeholder = st.empty()
+            streamed = ""
+            with st.spinner("Reviewing..."):
+                stream = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                        {"role": "user", "content": review},
+                    ],
+                    stream=True,
+                    temperature=0.2,
+                )
+                for chunk in stream:
+                    piece = chunk.choices[0].delta.content or ""
+                    streamed += piece
+                    placeholder.markdown(streamed)
+
+            st.session_state.history.append(("assistant", streamed))
+            st.session_state.awaiting_answer = False
+else:
+    st.info("Please upload your homework to begin.", icon="📎")
