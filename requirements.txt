@@ -6,8 +6,9 @@ langchain-community
 faiss-cpu
 python-dotenv
 pypdf
+pypdf2
 streamlit-chat
-
 tiktoken
 python-docx
+numpy
 
