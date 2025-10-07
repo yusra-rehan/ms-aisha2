@@ -1,8 +1,6 @@
-# 📄 Document question answering template
+# 📄 Ms AISHA - Student Tutor
 
-A simple Streamlit app that answers questions about an uploaded document via OpenAI's GPT-3.5.
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://document-question-answering-template.streamlit.app/)
+A simple Streamlit app that answers questions on student homework via OpenAI's GPT-4
 
 ### How to run it on your own machine
 
