@@ -22,10 +22,10 @@ except Exception:
 
 st.set_page_config(page_title="MS AISHA — AI Student Helper", page_icon="📄", layout="centered")
 
-st.title("📄 MS AISHA (Artificially Intelligent Student Helping Assistant)")
+st.title("📄 🎓Ms. AISHA ✏️ 🤖") 
+st.title("(Artificially Intelligent Student Helping Agent)")
 st.write(
     "Upload your homework and any reference materials, then ask a question. "
-    "Add your OpenAI API key in the sidebar (or via `st.secrets['OPENAI_API_KEY']`). "
     "The tutor gives hints and guiding questions — **never direct answers**."
 )
 
@@ -35,7 +35,7 @@ with st.sidebar:
   #  api_key = st.secrets.get("OPENAI_API_KEY", "")
     api_key = st.secrets["openai_api_key"] if "openai_api_key" in st.secrets else st.text_input("Enter your OpenAI API key:", type="password")
 
-    st.caption("Tip: put `OPENAI_API_KEY = \"...\"` in `.streamlit/secrets.toml` for convenience.")
+    
     st.divider()
     st.write("Made for middle-school learners. Upload files and interact step-by-step.")
 
