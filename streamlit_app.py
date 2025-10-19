@@ -41,6 +41,7 @@ with st.sidebar:
 
     st.divider()
     st.write("Made for middle-school learners. Upload files and interact step-by-step.")
+    debug_ui = st.checkbox("Show debug info", value=False)
 
 if not api_key:
     st.info("Add your OpenAI API key in the sidebar to continue.", icon="🗝️")
@@ -60,6 +61,17 @@ if enable_youtube_search:
             youtube_client = build("youtube", "v3", developerKey=youtube_api_key)
         except Exception as e:
             st.sidebar.error(f"Failed to create YouTube client: {e}")
+
+# Debug UI: show raw assistant output and youtube client status
+if 'history' in st.session_state and debug_ui:
+    st.sidebar.markdown("**Debug**")
+    if st.session_state.history:
+        last = st.session_state.history[-1]
+        st.sidebar.write("Last message (role):", last[0])
+        st.sidebar.text_area("Last assistant raw output", value=last[1], height=200)
+    else:
+        st.sidebar.write("No conversation history yet.")
+    st.sidebar.write("YouTube client:", "present" if youtube_client else "not present")
 
 # --- File uploaders ---
 st.header("Step 1: Upload Homework and Study Material")
@@ -129,15 +141,13 @@ def is_valid_url(url: str) -> bool:
         return False
 
 def render_model_output(text: str, container=None):
-    """Render text and any MEDIA tokens found in `text` into the Streamlit app.
-
-    Supported tokens (each on its own line):
-      VIDEO:<https://...>
-      IMAGE:<https://...>
-      LINK:<https://...>|<label>
-    """
+    """Render text and any MEDIA tokens found in `text` into the Streamlit app."""
+    
     # show the textual content (remove token lines)
     cleaned = re.sub(r'^(VIDEO:.*|IMAGE:.*|LINK:.*)$', '', text, flags=re.MULTILINE).strip()
+    # Also remove inline Search: tokens from the cleaned text
+    cleaned = re.sub(r'Search:\s*[^.!?\n]+', '', cleaned)
+    
     if cleaned:
         if container:
             container.markdown(cleaned)
@@ -171,7 +181,8 @@ def render_model_output(text: str, container=None):
             st.warning(f"Link appears invalid or blocked: {url}")
 
     # search tokens: Search: <query> -> perform youtube search if enabled
-    for m in re.findall(r'^Search:\s*(.+)$', text, flags=re.MULTILINE):
+    # Changed to match Search: anywhere in text, not just on its own line
+    for m in re.findall(r'Search:\s*([^.!?\n]+)', text):
         query = m.strip()
         if not query:
             continue
@@ -206,21 +217,24 @@ if uploaded_homework:
         st.session_state.history = []  # [(role, content), ...]
 
     SYSTEM_INSTRUCTIONS = (
-        "You are a warm, encouraging middle-school tutor.\n"
-        "Rules:\n"
-        "1) Never give the direct answer.\n"
-        "2) Use hints, guiding questions, and short explanations.\n"
-        "3) Break problems into steps; check understanding before moving on.\n"
-        "4) Encourage the student to show their thinking.\n"
-        "5) If the student is correct, praise them and ask for the next step.\n"
-        "6) If they are done, invite them to paste final answers for review.\n"
-        "\nMedia and links formatting rules:\n"
-        "- If you include video recommendations, return them on their own line using the exact token: VIDEO:<https://...>\n"
-        "- If you include images, return IMAGE:<https://...> on its own line.\n"
-        "- For general links, return LINK:<https://...>|<label> on its own line.\n"
-        "- Do NOT fabricate URLs. If you cannot provide a reliable link, give a short search query or a video title instead (for example: Search: \"Pythagorean theorem explained for middle school\").\n"
-        "- Always put textual hints first; media tokens are optional and used only to supplement learning.\n"
-    )
+    "You are a warm, encouraging middle-school tutor.\n"
+    "Rules:\n"
+    "1) Never give the direct answer.\n"
+    "2) Use hints, guiding questions, and short explanations.\n"
+    "3) Break problems into steps; check understanding before moving on.\n"
+    "4) Encourage the student to show their thinking.\n"
+    "5) If the student is correct, praise them and ask for the next step.\n"
+    "6) If they are done, invite them to paste final answers for review.\n"
+    "7) ALWAYS recommend at least one helpful video for the topic using the format below.\n"
+    "\nMedia and links formatting rules:\n"
+    "- For video recommendations, use: Search: <query>\n"
+    "  Example: Search: fractions to decimals for middle school\n"
+    "- ALWAYS include at least one Search: token in your response to help students with visual learning.\n"
+    "- Make search queries specific and middle-school appropriate.\n"
+    "- You can include multiple Search: tokens for different aspects of the problem.\n"
+    "- Keep search queries concise (5-8 words max).\n"
+    "- Place Search: tokens naturally in your explanations where videos would be most helpful.\n"
+)
 
     # --- Start turn: tutor gives a first hint ---
     if not st.session_state.awaiting_answer and homework_text.strip():
