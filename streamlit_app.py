@@ -93,7 +93,7 @@ study_text = read_any(uploaded_study) if uploaded_study else ""
 
 
 ### Media rendering helpers
-ALLOWED_HOSTS = None  # set to a list like {"youtube.com","youtu.be","vimeo.com","imgur.com"} to restrict
+ALLOWED_HOSTS =  {"youtube.com","youtu.be","vimeo.com","imgur.com"}
 
 def is_valid_url(url: str) -> bool:
     try:
