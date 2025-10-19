@@ -1,11 +1,6 @@
 import streamlit as st
 from openai import OpenAI
-from langchain.agents import Tool, initialize_agent
-from langchain.chains import ConversationalRetrievalChain
-from langchain.vectorstores import FAISS
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.memory import ConversationBufferMemory
-from langchain.schema import Document
+
 import io
 try:
     from docx import Document as DocxDocument
