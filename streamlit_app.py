@@ -11,6 +11,8 @@ try:
     import PyPDF2
 except Exception:
     PyPDF2 = None
+import re
+from urllib.parse import urlparse
 
 
 
@@ -89,6 +91,66 @@ def read_any(file):
 homework_text = read_any(uploaded_homework) if uploaded_homework else ""
 study_text = read_any(uploaded_study) if uploaded_study else ""
 
+
+### Media rendering helpers
+ALLOWED_HOSTS = None  # set to a list like {"youtube.com","youtu.be","vimeo.com","imgur.com"} to restrict
+
+def is_valid_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        if not parsed.netloc:
+            return False
+        if ALLOWED_HOSTS:
+            host = parsed.netloc.lower()
+            return any(h in host for h in ALLOWED_HOSTS)
+        return True
+    except Exception:
+        return False
+
+def render_model_output(text: str, container=None):
+    """Render text and any MEDIA tokens found in `text` into the Streamlit app.
+
+    Supported tokens (each on its own line):
+      VIDEO:<https://...>
+      IMAGE:<https://...>
+      LINK:<https://...>|<label>
+    """
+    # show the textual content (remove token lines)
+    cleaned = re.sub(r'^(VIDEO:.*|IMAGE:.*|LINK:.*)$', '', text, flags=re.MULTILINE).strip()
+    if cleaned:
+        if container:
+            container.markdown(cleaned)
+        else:
+            st.markdown(cleaned)
+
+    # videos
+    for m in re.findall(r'^VIDEO:(\S+)$', text, flags=re.MULTILINE):
+        url = m.strip()
+        if is_valid_url(url):
+            st.video(url)
+        else:
+            st.warning(f"Video URL appears invalid or blocked: {url}")
+
+    # images
+    for m in re.findall(r'^IMAGE:(\S+)$', text, flags=re.MULTILINE):
+        url = m.strip()
+        if is_valid_url(url):
+            st.image(url, use_column_width=True)
+        else:
+            st.warning(f"Image URL appears invalid or blocked: {url}")
+
+    # links: LINK:<url>|<label>
+    for m in re.findall(r'^LINK:(\S+)\|(.+)$', text, flags=re.MULTILINE):
+        url, label = m
+        url = url.strip()
+        label = label.strip()
+        if is_valid_url(url):
+            st.markdown(f"[{label}]({url})")
+        else:
+            st.warning(f"Link appears invalid or blocked: {url}")
+
 if uploaded_homework:
     st.header("Step 2: Let’s Work on Your Homework!")
     st.write(
@@ -117,6 +179,8 @@ if uploaded_homework:
     if not st.session_state.awaiting_answer and homework_text.strip():
         prompt = (
             "Start by giving a helpful hint or a question to get the student going. "
+            "Search the internet useful study material or youtube links and provide them if needed"
+            "Ask the student if they know how to start, if not then provide the video reference"
             "Use the study material only if relevant.\n\n"
             f"Homework:\n{homework_text}\n\n"
             f"Study Material:\n{study_text}\n"
@@ -139,6 +203,8 @@ if uploaded_homework:
                 piece = chunk.choices[0].delta.content or ""
                 streamed += piece
                 placeholder.markdown(streamed)
+        # after stream finishes, render potential media tokens
+        render_model_output(streamed, container=placeholder)
 
         st.session_state.history.append(("assistant", streamed))
         st.session_state.awaiting_answer = True
@@ -158,6 +224,8 @@ if uploaded_homework:
                 f"Study Material:\n{study_text}\n\n"
                 "Evaluate if the student is on track. Do NOT give the answer. "
                 "Give feedback and the next hint or question. If correct, encourage and ask for the next step. "
+                "If not correct then try to understand where the student is going wrong and provide youtube examples or useful links."
+                "If still not correct, try to draw some diagrams or provide simpler explanations."
                 "If finished, ask for final answers for review. If stuck, break it down further."
             )
 
@@ -178,6 +246,7 @@ if uploaded_homework:
                     piece = chunk.choices[0].delta.content or ""
                     streamed += piece
                     placeholder.markdown(streamed)
+            render_model_output(streamed, container=placeholder)
 
             st.session_state.history.append(("assistant", streamed))
             st.session_state.awaiting_answer = True
@@ -197,20 +266,20 @@ if uploaded_homework:
             placeholder = st.empty()
             streamed = ""
             with st.spinner("Reviewing..."):
-                stream = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": SYSTEM_INSTRUCTIONS},
-                        {"role": "user", "content": review},
-                    ],
-                    stream=True,
-                    temperature=0.2,
-                )
-                for chunk in stream:
-                    piece = chunk.choices[0].delta.content or ""
-                    streamed += piece
-                    placeholder.markdown(streamed)
-
+                    stream = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                            {"role": "user", "content": review},
+                        ],
+                        stream=True,
+                        temperature=0.2,
+                    )
+                    for chunk in stream:
+                        piece = chunk.choices[0].delta.content or ""
+                        streamed += piece
+                        placeholder.markdown(streamed)
+            render_model_output(streamed, container=placeholder)
             st.session_state.history.append(("assistant", streamed))
             st.session_state.awaiting_answer = False
 else:
