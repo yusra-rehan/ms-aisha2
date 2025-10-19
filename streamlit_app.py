@@ -13,6 +13,10 @@ except Exception:
     PyPDF2 = None
 import re
 from urllib.parse import urlparse
+try:
+    from googleapiclient.discovery import build
+except Exception:
+    build = None
 
 
 
@@ -29,10 +33,12 @@ st.write(
 # --- API key (no hard-coding) ---
 with st.sidebar:
     st.header("🔐 API")
-  #  api_key = st.secrets.get("OPENAI_API_KEY", "")
+    # api_key = st.secrets.get("OPENAI_API_KEY", "")
     api_key = st.secrets["openai_api_key"] if "openai_api_key" in st.secrets else st.text_input("Enter your OpenAI API key:", type="password")
+    # YouTube API key (optional) — used only if you enable automatic YouTube search below
+    youtube_api_key = st.secrets.get("youtube_api_key") if "youtube_api_key" in st.secrets else st.text_input("YouTube API key (optional):", type="password")
+    enable_youtube_search = st.checkbox("Allow agent to fetch YouTube links (uses YouTube Data API)", value=False)
 
-    
     st.divider()
     st.write("Made for middle-school learners. Upload files and interact step-by-step.")
 
@@ -41,6 +47,19 @@ if not api_key:
     st.stop()
 
 client = OpenAI(api_key=api_key)
+
+# construct youtube client if requested and key present
+youtube_client = None
+if enable_youtube_search:
+    if not youtube_api_key:
+        st.sidebar.warning("You enabled YouTube search but did not provide a YouTube API key in the sidebar or in Streamlit secrets.")
+    elif build is None:
+        st.sidebar.warning("google-api-python-client is not installed. Add it to requirements.txt to enable YouTube searches.")
+    else:
+        try:
+            youtube_client = build("youtube", "v3", developerKey=youtube_api_key)
+        except Exception as e:
+            st.sidebar.error(f"Failed to create YouTube client: {e}")
 
 # --- File uploaders ---
 st.header("Step 1: Upload Homework and Study Material")
@@ -150,6 +169,28 @@ def render_model_output(text: str, container=None):
             st.markdown(f"[{label}]({url})")
         else:
             st.warning(f"Link appears invalid or blocked: {url}")
+
+    # search tokens: Search: <query> -> perform youtube search if enabled
+    for m in re.findall(r'^Search:\s*(.+)$', text, flags=re.MULTILINE):
+        query = m.strip()
+        if not query:
+            continue
+        if youtube_client is None:
+            st.info(f"Suggested search: '{query}'. Enable YouTube search in the sidebar to fetch results automatically.")
+            continue
+        # perform a simple YouTube search and render the top video
+        try:
+            res = youtube_client.search().list(q=query, part="snippet", type="video", maxResults=1).execute()
+            items = res.get("items", [])
+            if not items:
+                st.info(f"No YouTube results found for: {query}")
+                continue
+            video_id = items[0]["id"]["videoId"]
+            video_url = f"https://youtu.be/{video_id}"
+            st.video(video_url)
+            st.markdown(f"[Watch on YouTube]({video_url})")
+        except Exception as e:
+            st.warning(f"YouTube search failed for '{query}': {e}")
 
 if uploaded_homework:
     st.header("Step 2: Let’s Work on Your Homework!")

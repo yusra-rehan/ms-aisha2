@@ -11,4 +11,5 @@ streamlit-chat
 tiktoken
 python-docx
 numpy
+google-api-python-client
 
