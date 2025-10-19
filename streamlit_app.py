@@ -173,14 +173,21 @@ if uploaded_homework:
         "4) Encourage the student to show their thinking.\n"
         "5) If the student is correct, praise them and ask for the next step.\n"
         "6) If they are done, invite them to paste final answers for review.\n"
+        "\nMedia and links formatting rules:\n"
+        "- If you include video recommendations, return them on their own line using the exact token: VIDEO:<https://...>\n"
+        "- If you include images, return IMAGE:<https://...> on its own line.\n"
+        "- For general links, return LINK:<https://...>|<label> on its own line.\n"
+        "- Do NOT fabricate URLs. If you cannot provide a reliable link, give a short search query or a video title instead (for example: Search: \"Pythagorean theorem explained for middle school\").\n"
+        "- Always put textual hints first; media tokens are optional and used only to supplement learning.\n"
     )
 
     # --- Start turn: tutor gives a first hint ---
     if not st.session_state.awaiting_answer and homework_text.strip():
         prompt = (
             "Start by giving a helpful hint or a question to get the student going. "
-            "Search the internet useful study material or youtube links and provide them if needed"
-            "Ask the student if they know how to start, if not then provide the video reference"
+            "If you recommend videos or images, include them using the MEDIA tokens (VIDEO:/IMAGE:/LINK) specified in system instructions. "
+            "If you cannot provide a reliable link, provide a short search query or video title the student can use to find a tutorial. "
+            "Ask the student if they know how to start; if not, provide the next hint or a suggested video (as a token). "
             "Use the study material only if relevant.\n\n"
             f"Homework:\n{homework_text}\n\n"
             f"Study Material:\n{study_text}\n"
@@ -224,8 +231,9 @@ if uploaded_homework:
                 f"Study Material:\n{study_text}\n\n"
                 "Evaluate if the student is on track. Do NOT give the answer. "
                 "Give feedback and the next hint or question. If correct, encourage and ask for the next step. "
-                "If not correct then try to understand where the student is going wrong and provide youtube examples or useful links."
-                "If still not correct, try to draw some diagrams or provide simpler explanations."
+                "If not correct, try to understand where the student is going wrong and provide helpful hints. "
+                "You may include VIDEO:/IMAGE:/LINK tokens with full https URLs if you have reliable links; otherwise include suggested search queries or video titles the student can search for. "
+                "If still not correct, try to draw simple diagrams or provide simpler explanations. "
                 "If finished, ask for final answers for review. If stuck, break it down further."
             )
 
